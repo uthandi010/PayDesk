@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+permissions:
+  contents: read
+
+jobs:
+  server:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true # runs 'bundle install' and caches installed gems automatically
+          working-directory: server
+
+      - name: Set up the test database
+        working-directory: server
+        env:
+          RAILS_ENV: test
+        run: bin/rails db:schema:load
+
+      - name: Run tests
+        working-directory: server
+        run: bundle exec rspec
+
+      - name: Lint (RuboCop)
+        working-directory: server
+        run: bin/rubocop
+
+      - name: Security scan (Brakeman)
+        working-directory: server
+        run: bin/brakeman --quiet --no-pager --exit-on-warn --exit-on-error
+
+      - name: Gem audit
+        working-directory: server
+        run: bin/bundler-audit --update
+
+  client:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - name: Install dependencies
+        working-directory: client
+        run: npm ci
+
+      - name: Run tests
+        working-directory: client
+        run: npm test
+
+      - name: Build
+        working-directory: client
+        run: npm run build

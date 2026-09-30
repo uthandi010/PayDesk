@@ -1,0 +1,65 @@
+import { createContext, useCallback, useContext, useMemo, useState } from "react";
+import * as authApi from "../api/auth";
+import { getToken, setToken } from "../api/client";
+
+const USER_KEY = "paydesk_user";
+
+function readStoredUser() {
+  const raw = localStorage.getItem(USER_KEY);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+const AuthContext = createContext(undefined);
+
+export function AuthProvider({ children }) {
+  const [user, setUser] = useState(() => (getToken() ? readStoredUser() : null));
+
+  const applyAuthResponse = useCallback((auth) => {
+    setToken(auth.token);
+    const nextUser = { userId: auth.userId, name: auth.name, email: auth.email };
+    localStorage.setItem(USER_KEY, JSON.stringify(nextUser));
+    setUser(nextUser);
+  }, []);
+
+  const login = useCallback(
+    async (email, password) => {
+      const auth = await authApi.login(email, password);
+      applyAuthResponse(auth);
+    },
+    [applyAuthResponse]
+  );
+
+  const register = useCallback(
+    async (name, email, password) => {
+      const auth = await authApi.register(name, email, password);
+      applyAuthResponse(auth);
+    },
+    [applyAuthResponse]
+  );
+
+  const logout = useCallback(() => {
+    setToken(null);
+    localStorage.removeItem(USER_KEY);
+    setUser(null);
+  }, []);
+
+  const value = useMemo(
+    () => ({ user, isAuthenticated: user !== null, login, register, logout }),
+    [user, login, register, logout]
+  );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}
+
+export function useAuth() {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error("useAuth must be used within an AuthProvider");
+  }
+  return context;
+}
