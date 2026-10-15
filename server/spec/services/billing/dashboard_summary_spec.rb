@@ -46,6 +46,34 @@ RSpec.describe Billing::DashboardSummary do
     expect(summary[:revenue_by_month].map { |m| m[:month] }).to eq(summary[:revenue_by_month].map { |m| m[:month] }.sort)
   end
 
+  it "sums paid invoices into the month they were paid in and ignores ones before the window" do
+    subscription = create(:subscription, user: user)
+    this_month = Time.current.beginning_of_month + 1.day
+    last_month = this_month - 1.month
+    create(:invoice, subscription: subscription, status: :paid, paid_at: this_month, amount_cents: 100)
+    create(:invoice, subscription: subscription, status: :paid, paid_at: this_month + 1.hour, amount_cents: 200)
+    create(:invoice, subscription: subscription, status: :paid, paid_at: last_month, amount_cents: 400)
+    create(:invoice, subscription: subscription, status: :paid, paid_at: this_month - 3.months, amount_cents: 800)
+
+    summary = described_class.new(user, months: 2).call
+
+    expect(summary[:revenue_by_month]).to eq([
+      { month: last_month.strftime("%Y-%m"), amountCents: 400 },
+      { month: this_month.strftime("%Y-%m"), amountCents: 300 }
+    ])
+  end
+
+  it "doesn't rely on database-specific date functions" do
+    queries = []
+    callback = ->(*, payload) { queries << payload[:sql] }
+
+    ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+      described_class.new(user).call
+    end
+
+    expect(queries.join("\n")).not_to match(/strftime|date_trunc|to_char/i)
+  end
+
   it "excludes invoices that are open or void from monthly revenue" do
     subscription = create(:subscription, user: user)
     create(:invoice, subscription: subscription, status: :open, amount_cents: 999)
