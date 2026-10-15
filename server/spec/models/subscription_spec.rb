@@ -20,4 +20,24 @@ RSpec.describe Subscription do
 
     expect(subscription).to be_valid
   end
+
+  it "can't be created on an inactive plan" do
+    user = create(:user)
+    plan = create(:plan, user: user, active: false)
+
+    subscription = build(:subscription, plan: plan, user: user)
+
+    expect(subscription).not_to be_valid
+    expect(subscription.errors[:plan]).to include("is inactive and can't be sold")
+  end
+
+  it "stays valid when its plan is retired after it was created" do
+    user = create(:user)
+    plan = create(:plan, user: user)
+    subscription = create(:subscription, plan: plan, user: user)
+
+    plan.update!(active: false)
+
+    expect(subscription.reload).to be_valid
+  end
 end

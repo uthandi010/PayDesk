@@ -23,6 +23,18 @@ RSpec.describe "Subscriptions", type: :request do
     expect(response.parsed_body["status"]).to eq("past_due")
   end
 
+  it "won't sell an inactive plan, and doesn't bill anything" do
+    customer = create(:customer, user: user, email: "regular@example.com")
+    plan.update!(active: false)
+
+    expect {
+      post "/api/subscriptions", params: { customer_id: customer.id, plan_id: plan.id }, headers: auth_headers(user)
+    }.not_to change { [ Subscription.count, Invoice.count, Payment.count ] }
+
+    expect(response).to have_http_status(:unprocessable_content)
+    expect(response.parsed_body["message"]).to eq("Plan is inactive and can't be sold")
+  end
+
   it "won't let you subscribe someone else's customer to your plan" do
     other_customer = create(:customer, user: create(:user))
 
