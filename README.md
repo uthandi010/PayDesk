@@ -20,7 +20,8 @@ a revenue dashboard that normalizes monthly and yearly plans onto a common MRR f
   customer email domains (the same trick real sandboxes use with test card numbers) so both the
   success and failure paths are exercisable and tested without any real processor
 - **Manual renewal** — `POST /subscriptions/:id/renew` advances a subscription into its next billing
-  period and bills it, standing in for what a scheduled job would do in production
+  period and bills it, standing in for what a scheduled job would do in production. It's refused
+  until the current period has ended, and while an earlier invoice is still unpaid
 - **PDF invoices** — a real downloadable PDF per invoice, generated with Prawn
 - **A public "pay your invoice" link** — each invoice gets an unguessable token
   (`/invoice/:token`); a customer can view and pay it with no account, the way a real invoicing
@@ -65,6 +66,14 @@ cd server
 bundle exec rspec
 ```
 
+API environment variables (all optional):
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `CORS_ORIGINS` | `http://localhost:5173,http://127.0.0.1:5173` | Comma-separated origins allowed to call `/api/*` |
+| `RAILS_FORCE_SSL` / `RAILS_ASSUME_SSL` | off | Production only: set to `true` once served over HTTPS (e.g. behind kamal-proxy with SSL) |
+| `RACK_ATTACK_ENABLED` | `true` | Throttling of login/register and the public pay link (`config/initializers/rack_attack.rb`) |
+
 ### Client
 
 ```bash
@@ -88,13 +97,17 @@ app that talks to a payment gateway. Every invoice charge - the first one at sub
 a manual retry, a renewal, or a customer paying their own public link - goes through it, so an
 invoice's status, its subscription's status, and its `Payment` history can never drift apart:
 
-1. Ask the configured gateway to charge the invoice's `customer` for its `amount_cents`.
-2. Record a `Payment` either way (`succeeded` or `failed`, with the gateway's reference or failure
+1. Lock the invoice row and re-check, under that lock, that the invoice is still `open` and its
+   subscription isn't `canceled` - so concurrent pay/retry requests can't double-charge, and void,
+   paid, or canceled-subscription invoices are refused.
+2. Ask the configured gateway to charge the invoice's `customer` for its `amount_cents`, passing an
+   idempotency key that is stable per attempt (`invoice-<id>-attempt-<n>`).
+3. Record a `Payment` either way (`succeeded` or `failed`, with the gateway's reference or failure
    reason).
-3. On success: mark the invoice `paid`, stamp `paid_at`, and bring a `past_due` subscription back to
+4. On success: mark the invoice `paid`, stamp `paid_at`, and bring a `past_due` subscription back to
    `active`.
-4. On failure: leave the invoice `open` and mark the subscription `past_due` (unless it's already
-   `canceled`) - it's never silently treated as paid.
+5. On failure: leave the invoice `open` and mark the subscription `past_due` - it's never silently
+   treated as paid.
 
 `PaymentGateways::FakeGateway` is the only gateway PayDesk ships with, so the whole app - including
 CI - runs end to end with no API keys. It succeeds for any ordinary customer, and deterministically

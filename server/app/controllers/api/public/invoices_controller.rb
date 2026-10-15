@@ -14,7 +14,7 @@ module Api
       def pay
         result = Billing::InvoiceCharger.new.call(@invoice)
         render json: invoice_json(result.invoice)
-      rescue ArgumentError => e
+      rescue Billing::InvoiceCharger::NotChargeableError => e
         render json: { message: e.message }, status: :unprocessable_content
       end
 

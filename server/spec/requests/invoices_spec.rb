@@ -40,6 +40,29 @@ RSpec.describe "Invoices", type: :request do
     expect(response).to have_http_status(:unprocessable_content)
   end
 
+  it "refuses to retry an open invoice whose subscription has been canceled" do
+    customer = create(:customer, user: user, email: "regular@example.com")
+    subscription = create(:subscription, user: user, customer: customer, status: :canceled)
+    invoice = create(:invoice, subscription: subscription, status: :open)
+
+    post "/api/invoices/#{invoice.id}/retry", headers: auth_headers(user)
+
+    expect(response).to have_http_status(:unprocessable_content)
+    expect(invoice.reload).to be_open
+    expect(invoice.payments).to be_empty
+  end
+
+  it "refuses to retry a void invoice" do
+    customer = create(:customer, user: user, email: "regular@example.com")
+    subscription = create(:subscription, user: user, customer: customer)
+    invoice = create(:invoice, subscription: subscription, status: :void)
+
+    post "/api/invoices/#{invoice.id}/retry", headers: auth_headers(user)
+
+    expect(response).to have_http_status(:unprocessable_content)
+    expect(invoice.payments).to be_empty
+  end
+
   it "downloads a PDF for an invoice" do
     customer = create(:customer, user: user)
     subscription = create(:subscription, user: user, customer: customer)
@@ -78,6 +101,39 @@ RSpec.describe "Invoices", type: :request do
 
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body["status"]).to eq("paid")
+    end
+
+    it "refuses to pay an invoice that is already paid" do
+      customer = create(:customer, user: user, email: "regular@example.com")
+      subscription = create(:subscription, user: user, customer: customer)
+      invoice = create(:invoice, subscription: subscription, status: :paid, paid_at: Time.current)
+
+      post "/api/public/invoices/#{invoice.public_token}/pay"
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(invoice.payments).to be_empty
+    end
+
+    it "refuses to pay a void invoice" do
+      customer = create(:customer, user: user, email: "regular@example.com")
+      subscription = create(:subscription, user: user, customer: customer)
+      invoice = create(:invoice, subscription: subscription, status: :void)
+
+      post "/api/public/invoices/#{invoice.public_token}/pay"
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(invoice.payments).to be_empty
+    end
+
+    it "refuses to pay an invoice for a canceled subscription" do
+      customer = create(:customer, user: user, email: "regular@example.com")
+      subscription = create(:subscription, user: user, customer: customer, status: :canceled)
+      invoice = create(:invoice, subscription: subscription, status: :open)
+
+      post "/api/public/invoices/#{invoice.public_token}/pay"
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(invoice.reload).to be_open
     end
   end
 end

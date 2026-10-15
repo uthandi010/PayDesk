@@ -15,7 +15,7 @@ module Api
     def retry
       result = Billing::InvoiceCharger.new.call(@invoice)
       render json: invoice_json(result.invoice, include_payments: true)
-    rescue ArgumentError => e
+    rescue Billing::InvoiceCharger::NotChargeableError => e
       render json: { message: e.message }, status: :unprocessable_content
     end
 
