@@ -41,6 +41,19 @@ RSpec.describe "Subscriptions", type: :request do
     expect(response.parsed_body["status"]).to eq("canceled")
   end
 
+  it "voids the subscription's open invoices on cancel, leaving paid ones alone" do
+    customer = create(:customer, user: user)
+    subscription = create(:subscription, user: user, customer: customer, plan: plan)
+    open_invoice = create(:invoice, subscription: subscription, status: :open)
+    paid_invoice = create(:invoice, subscription: subscription, status: :paid, paid_at: Time.current)
+
+    patch "/api/subscriptions/#{subscription.id}/cancel", headers: auth_headers(user)
+
+    expect(response).to have_http_status(:ok)
+    expect(open_invoice.reload).to be_void
+    expect(paid_invoice.reload).to be_paid
+  end
+
   it "renews a subscription into its next period" do
     customer = create(:customer, user: user, email: "regular@example.com")
     subscription = create(:subscription, user: user, customer: customer, plan: plan,

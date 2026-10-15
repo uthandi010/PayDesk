@@ -23,7 +23,12 @@ module Api
     end
 
     def cancel
-      @subscription.update!(status: :canceled)
+      # Void whatever is still open so a canceled subscription can't be
+      # charged later through a retry or a public pay link.
+      ActiveRecord::Base.transaction do
+        @subscription.update!(status: :canceled)
+        @subscription.invoices.open.update_all(status: :void, updated_at: Time.current)
+      end
       render json: subscription_json(@subscription)
     end
 
