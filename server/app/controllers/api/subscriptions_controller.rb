@@ -35,7 +35,7 @@ module Api
     def renew
       subscription = Billing::SubscriptionRenewer.new.call(@subscription)
       render json: subscription_json(subscription)
-    rescue Billing::SubscriptionRenewer::AlreadyCanceledError => e
+    rescue Billing::SubscriptionRenewer::RenewalError => e
       render json: { message: e.message }, status: :unprocessable_content
     end
 

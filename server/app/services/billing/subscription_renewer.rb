@@ -4,20 +4,29 @@ module Billing
   # whose current_period_end has passed; here it's exposed as an explicit
   # action (POST /api/subscriptions/:id/renew) so the recurring part of
   # "recurring billing" is actually reachable without a job scheduler.
+  #
+  # A renewal is refused (with a RenewalError) unless the current period
+  # has actually ended, and while the subscription is past_due or still has
+  # an open invoice - that invoice has to be paid (retry / public link) or
+  # the subscription canceled first, rather than piling up unpaid periods.
   class SubscriptionRenewer
-    class AlreadyCanceledError < StandardError; end
+    class RenewalError < StandardError; end
+    class AlreadyCanceledError < RenewalError; end
+    class NotDueError < RenewalError; end
+    class UnpaidInvoiceError < RenewalError; end
 
     def initialize(charger: InvoiceCharger.new)
       @charger = charger
     end
 
     def call(subscription)
-      raise AlreadyCanceledError, "cannot renew a canceled subscription" if subscription.canceled?
-
       invoice = nil
       plan = subscription.plan
 
-      ActiveRecord::Base.transaction do
+      # Locked so two concurrent renew requests can't both advance the period.
+      subscription.with_lock do
+        ensure_renewable!(subscription)
+
         new_start = subscription.current_period_end
         subscription.update!(current_period_start: new_start, current_period_end: new_start + plan.period_length)
 
@@ -30,6 +39,22 @@ module Billing
 
       @charger.call(invoice)
       subscription.reload
+    end
+
+    private
+
+    def ensure_renewable!(subscription)
+      raise AlreadyCanceledError, "cannot renew a canceled subscription" if subscription.canceled?
+
+      if subscription.past_due? || subscription.invoices.open.exists?
+        raise UnpaidInvoiceError,
+              "cannot renew while an invoice is unpaid - pay or retry the open invoice first"
+      end
+
+      if subscription.current_period_end > Time.current
+        raise NotDueError,
+              "cannot renew before the current period ends (#{subscription.current_period_end.iso8601})"
+      end
     end
   end
 end

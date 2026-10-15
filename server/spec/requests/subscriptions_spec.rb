@@ -77,6 +77,18 @@ RSpec.describe "Subscriptions", type: :request do
     expect(Subscription.find(subscription.id).invoices.count).to eq(1)
   end
 
+  it "refuses to renew a subscription whose current period hasn't ended yet" do
+    customer = create(:customer, user: user, email: "regular@example.com")
+    subscription = create(:subscription, user: user, customer: customer, plan: plan,
+                           current_period_start: Time.current, current_period_end: 1.month.from_now)
+
+    post "/api/subscriptions/#{subscription.id}/renew", headers: auth_headers(user)
+
+    expect(response).to have_http_status(:unprocessable_content)
+    expect(response.parsed_body["message"]).to match(/before the current period ends/)
+    expect(subscription.invoices.count).to eq(0)
+  end
+
   it "refuses to renew a canceled subscription" do
     customer = create(:customer, user: user)
     subscription = create(:subscription, user: user, customer: customer, plan: plan, status: :canceled)

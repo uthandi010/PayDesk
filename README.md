@@ -20,7 +20,8 @@ a revenue dashboard that normalizes monthly and yearly plans onto a common MRR f
   customer email domains (the same trick real sandboxes use with test card numbers) so both the
   success and failure paths are exercisable and tested without any real processor
 - **Manual renewal** — `POST /subscriptions/:id/renew` advances a subscription into its next billing
-  period and bills it, standing in for what a scheduled job would do in production
+  period and bills it, standing in for what a scheduled job would do in production. It's refused
+  until the current period has ended, and while an earlier invoice is still unpaid
 - **PDF invoices** — a real downloadable PDF per invoice, generated with Prawn
 - **A public "pay your invoice" link** — each invoice gets an unguessable token
   (`/invoice/:token`); a customer can view and pay it with no account, the way a real invoicing
