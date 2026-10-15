@@ -66,6 +66,14 @@ cd server
 bundle exec rspec
 ```
 
+API environment variables (all optional):
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `CORS_ORIGINS` | `http://localhost:5173,http://127.0.0.1:5173` | Comma-separated origins allowed to call `/api/*` |
+| `RAILS_FORCE_SSL` / `RAILS_ASSUME_SSL` | off | Production only: set to `true` once served over HTTPS (e.g. behind kamal-proxy with SSL) |
+| `RACK_ATTACK_ENABLED` | `true` | Throttling of login/register and the public pay link (`config/initializers/rack_attack.rb`) |
+
 ### Client
 
 ```bash
