@@ -88,13 +88,17 @@ app that talks to a payment gateway. Every invoice charge - the first one at sub
 a manual retry, a renewal, or a customer paying their own public link - goes through it, so an
 invoice's status, its subscription's status, and its `Payment` history can never drift apart:
 
-1. Ask the configured gateway to charge the invoice's `customer` for its `amount_cents`.
-2. Record a `Payment` either way (`succeeded` or `failed`, with the gateway's reference or failure
+1. Lock the invoice row and re-check, under that lock, that the invoice is still `open` and its
+   subscription isn't `canceled` - so concurrent pay/retry requests can't double-charge, and void,
+   paid, or canceled-subscription invoices are refused.
+2. Ask the configured gateway to charge the invoice's `customer` for its `amount_cents`, passing an
+   idempotency key that is stable per attempt (`invoice-<id>-attempt-<n>`).
+3. Record a `Payment` either way (`succeeded` or `failed`, with the gateway's reference or failure
    reason).
-3. On success: mark the invoice `paid`, stamp `paid_at`, and bring a `past_due` subscription back to
+4. On success: mark the invoice `paid`, stamp `paid_at`, and bring a `past_due` subscription back to
    `active`.
-4. On failure: leave the invoice `open` and mark the subscription `past_due` (unless it's already
-   `canceled`) - it's never silently treated as paid.
+5. On failure: leave the invoice `open` and mark the subscription `past_due` - it's never silently
+   treated as paid.
 
 `PaymentGateways::FakeGateway` is the only gateway PayDesk ships with, so the whole app - including
 CI - runs end to end with no API keys. It succeeds for any ordinary customer, and deterministically

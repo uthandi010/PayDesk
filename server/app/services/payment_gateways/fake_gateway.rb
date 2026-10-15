@@ -13,7 +13,9 @@ module PaymentGateways
     DECLINED_DOMAIN = "declined.test"
     INSUFFICIENT_FUNDS_DOMAIN = "insufficientfunds.test"
 
-    def charge(amount_cents:, customer:)
+    # idempotency_key is accepted to honour the Base interface; there is no
+    # remote side here that could see a replayed request.
+    def charge(amount_cents:, customer:, idempotency_key: nil)
       domain = customer.email.to_s.split("@").last
 
       case domain

@@ -7,8 +7,11 @@ module PaymentGateways
   class Base
     # @param amount_cents [Integer]
     # @param customer [Customer]
+    # @param idempotency_key [String, nil] stable for a given charge attempt.
+    #   A real gateway should forward it (e.g. Stripe's Idempotency-Key
+    #   header) so a replayed attempt never charges the customer twice.
     # @return [PaymentGateways::ChargeResult]
-    def charge(amount_cents:, customer:)
+    def charge(amount_cents:, customer:, idempotency_key: nil)
       raise NotImplementedError, "#{self.class} must implement #charge"
     end
   end
